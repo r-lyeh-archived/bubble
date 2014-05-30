@@ -1,27 +1,8 @@
-/*
- * Bubble is a simple dialog library built on a text-based API.
- * Copyright (c) 2014 Mario 'rlyeh' Rodriguez
+/* Bubble is a simple dialog library built on a text-based API.
+ * Copyright (c) 2014, 2015, Mario 'rlyeh' Rodriguez, zlib/libpng licensed.
 
  * Callstack code is based on code by Magnus Norddahl (See http://goo.gl/LM5JB)
  * Mem/CPU OS code is based on code by David Robert Nadeau (See http://goo.gl/8P5Jqv)
-
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
 
  * - rlyeh
  */
@@ -33,6 +14,9 @@
 #include <sstream>
 #include <string>
 #include <iomanip>
+
+#define BUBBLE_VERSION "1.0.0" /* (2015/06/12) Diverse enhancements and clean ups
+#define BUBBLE_VERSION "0.0.0" // (2014/05/20) Initial commit */
 
 namespace bubble {
     struct string : std::wstring {
@@ -65,6 +49,9 @@ namespace bubble {
         string &operator<<( const T &t ) {
             std::wstringstream ss;
             return ss << t ? ( this->assign( *this + ss.str() ), *this ) : *this;
+        }
+        string &operator<<( const std::string &t ) {
+            return operator<<( std::wstring( t.begin(), t.end() ));
         }
         template<typename T>
         T as() const {

@@ -1,27 +1,8 @@
-/*
- * Bubble is a simple dialog library built on a text-based API.
- * Copyright (c) 2014 Mario 'rlyeh' Rodriguez
+/* Bubble is a simple dialog library built on a text-based API.
+ * Copyright (c) 2014, 2015, Mario 'rlyeh' Rodriguez, zlib/libpng licensed.
 
  * Callstack code is based on code by Magnus Norddahl (See http://goo.gl/LM5JB)
  * Mem/CPU OS code is based on code by David Robert Nadeau (See http://goo.gl/8P5Jqv)
-
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
 
  * - rlyeh
  */
@@ -109,7 +90,7 @@ $win32(
         {
             case TDN_DIALOG_CONSTRUCTED:
 
-                SendMessage( hwnd, TDM_SET_BUTTON_ELEVATION_REQUIRED_STATE, IDOK, 1 );
+                // SendMessage( hwnd, TDM_SET_BUTTON_ELEVATION_REQUIRED_STATE, IDOK, 1 );       // UAC, SHIELD
 
                 SendMessage( hwnd, TDM_SET_MARQUEE_PROGRESS_BAR, 0 /*off*/, 0 );                // marquee off
                 SendMessage( hwnd, TDM_SET_PROGRESS_BAR_MARQUEE, 1 /*on*/, 0 /*30ms*/ );        // marquee speed
@@ -119,24 +100,36 @@ $win32(
 
                 {
                     bubble::vars &ui = getDialog();
+                    if( ui["style.ontop"] ) {
+                        SetWindowPos(hwnd,       // handle to window
+                                    HWND_TOPMOST,  // placement-order handle
+                                    0,     // horizontal position
+                                    0,      // vertical position
+                                    0,  // width
+                                    0, // height
+                                    SWP_SHOWWINDOW|SWP_NOSIZE|SWP_NOMOVE// window-positioning options
+                                    );
+                        SetWindowPos(hwnd,       // handle to window
+                                    HWND_TOP,
+                                    0,     // horizontal position
+                                    0,      // vertical position
+                                    0,  // width
+                                    0, // height
+                                    SWP_SHOWWINDOW|SWP_NOSIZE|SWP_NOMOVE// window-positioning options
+                                    );
+                    }
+                    else
+                    if( ui["style.minimized"] ) {
+                        SetWindowPos(hwnd,       // handle to window
+                                    HWND_BOTTOM,  // placement-order handle
+                                    0,     // horizontal position
+                                    0,      // vertical position
+                                    0,  // width
+                                    0, // height
+                                    SWP_SHOWWINDOW|SWP_NOSIZE|SWP_NOMOVE// window-positioning options
+                                    );
+                    }
                 }
-
-                SetWindowPos(hwnd,       // handle to window
-                            HWND_TOPMOST,  // placement-order handle
-                            0,     // horizontal position
-                            0,      // vertical position
-                            0,  // width
-                            0, // height
-                            SWP_SHOWWINDOW|SWP_NOSIZE|SWP_NOMOVE// window-positioning options
-                            );
-                SetWindowPos(hwnd,       // handle to window
-                            HWND_TOP,
-                            0,     // horizontal position
-                            0,      // vertical position
-                            0,  // width
-                            0, // height
-                            SWP_SHOWWINDOW|SWP_NOSIZE|SWP_NOMOVE// window-positioning options
-                            );
 
                 // refresh ui by simulating timer
                 TDCallback( hwnd, TDN_TIMER, 0, lParam, dwRefData );
@@ -268,20 +261,21 @@ int bubble::show( const bubble::vars &d_, const std::function<void(bubble::vars 
     std::vector<TASKDIALOG_BUTTON> buttons( 16 );
 
     for( auto i = 0u; i < options.size(); ++i ) {
+        buttons[i] = {0};
+        buttons[i].pszButtonText = options[i].c_str();
         buttons[i].nButtonID = ( dialog[ bubble::string(i) + L".icon" ].as<int>() != -4 ? 100 + i : 1 );
         choices[ buttons[i].nButtonID ] = i;
-        buttons[i].pszButtonText = options[i].c_str();
     }
 
     int nButtonPressed                  = 0;
     TASKDIALOGCONFIG config             = {0};
 
-    config.pButtons                     = options.empty() ? 0 : &buttons[0];
-    config.cButtons                     = options.size();
+    config.pButtons                     = &buttons[0];
+    config.cButtons                     = (UINT)options.size();
 
     config.cbSize                       = sizeof(config);
     config.hInstance                    = 0; //hInst;
-    config.dwCommonButtons              = 0; //TDCBF_CANCEL_BUTTON;
+    config.dwCommonButtons              = 0; //TDCBF_OK_BUTTON; //TDCBF_CLOSE_BUTTON; //TDCBF_CANCEL_BUTTON;
 
     if( dialog.find("headialog.text") != dialog.end() ) {
         config.pszMainInstruction           = L" ";
@@ -299,7 +293,7 @@ int bubble::show( const bubble::vars &d_, const std::function<void(bubble::vars 
         config.pszExpandedInformation       = L" ";
     }
 
-    config.pszMainIcon                  = 0;
+    config.pszMainIcon                  = 0; //TD_INFORMATION_ICON; //MAKEINTRESOURCE(TD_SHIELD_ICON);
     config.pszFooterIcon                = 0;
 
     if( dialog.find("progress") != dialog.end() ) {
@@ -349,6 +343,13 @@ int bubble::show( const bubble::string &input, const std::function<void(bubble::
         std::wstringstream token(each);
         for( bubble::string prev, key; std::getline(token, key, L'='); prev = key ) {
             v[ v.find(prev) == v.end() ? key : prev ] = key;
+        }
+    }
+
+    for( auto &in : v ) {
+        for( auto &ch : in.second ) {
+            /**/ if( ch == '\a' ) ch = '=';
+            else if( ch == '\b' ) ch = ';';
         }
     }
 
