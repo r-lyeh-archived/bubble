@@ -3,7 +3,7 @@ bubble
 
 - Bubble is a simple and lightweight C++11 dialog library.
 - Bubble creates dialogs boxes, progress bars and radio buttons.
-- Bubble replaces MessageBox() with ease.
+- Bubble replaces MessageBox() and notify dialogs with ease.
 - Bubble provides callbacks to update dialogs.
 - Bubble has an expressive API based on strings.
 - Bubble has no external dependencies. Only native OS calls are used.
@@ -24,11 +24,15 @@ int main() {
         []( bubble::vars &ui ) {
             ui["progress"] = ui["progress"] + 10;
         } );
+
+    bubble::notify("notify dialog, using icon #19", "hello world", 19);
 }
 ```
 
 ### Possible output
 ![image](https://raw.github.com/r-lyeh/depot/master/bubble-snapshot-1.png)
+
+![image](https://raw.github.com/r-lyeh/depot/master/bubble-snapshot-5.png)
 
 ### More samples
 Check [sample.cc](sample.cc) for a few examples
@@ -71,6 +75,8 @@ Check [sample.cc](sample.cc) for a few examples
 ![image](https://raw.github.com/r-lyeh/depot/master/bubble-imageresdll.png)
 
 ### Changelog
+- v1.1.0 (2015/09/25) 
+  - Add notify / taskbar dialogs
 - v1.0.0 (2015/06/12)
   - Diverse enhancements and clean ups
 - v0.0.0 (2014/xx/xx)

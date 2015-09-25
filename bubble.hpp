@@ -1,11 +1,6 @@
-/* Bubble is a simple dialog library built on a text-based API.
- * Copyright (c) 2014, 2015, Mario 'rlyeh' Rodriguez, zlib/libpng licensed.
-
- * Callstack code is based on code by Magnus Norddahl (See http://goo.gl/LM5JB)
- * Mem/CPU OS code is based on code by David Robert Nadeau (See http://goo.gl/8P5Jqv)
-
- * - rlyeh
- */
+// Bubble is a simple and lightweight dialog library (for Windows)
+// Based on code by napalm @ netcore2k and Guillaume @ paralint.com.
+// - rlyeh, zlib/libpng licensed.
 
 #pragma once
 
@@ -15,7 +10,8 @@
 #include <string>
 #include <iomanip>
 
-#define BUBBLE_VERSION "1.0.0" /* (2015/06/12) Diverse enhancements and clean ups
+#define BUBBLE_VERSION "1.1.0" /* (2015/09/25) Add notify / taskbar dialogs
+#define BUBBLE_VERSION "1.0.0" // (2015/06/12) Diverse enhancements and clean ups
 #define BUBBLE_VERSION "0.0.0" // (2014/05/20) Initial commit */
 
 namespace bubble {
@@ -71,4 +67,8 @@ namespace bubble {
 
     int show( const bubble::string &options, const std::function<void(bubble::vars &)> &cb2 = std::function<void(bubble::vars &)>() );
     int show( const bubble::vars &map, const std::function<void(bubble::vars &)> &cb2 = std::function<void(bubble::vars &)>() );
+
+    void notify( const bubble::string &text, const bubble::string &title );
+    void notify( const bubble::string &text, const bubble::string &title, int icon_number );
+    void notify( const bubble::string &text, const bubble::string &title, const bubble::string &icon_file );
 }

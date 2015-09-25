@@ -1,11 +1,6 @@
-/* Bubble is a simple dialog library built on a text-based API.
- * Copyright (c) 2014, 2015, Mario 'rlyeh' Rodriguez, zlib/libpng licensed.
-
- * Callstack code is based on code by Magnus Norddahl (See http://goo.gl/LM5JB)
- * Mem/CPU OS code is based on code by David Robert Nadeau (See http://goo.gl/8P5Jqv)
-
- * - rlyeh
- */
+// Bubble is a simple and lightweight dialog library (for Windows)
+// Based on code by napalm @ netcore2k and Guillaume @ paralint.com.
+// - rlyeh, zlib/libpng licensed.
 
 // [ref] http://msdn.microsoft.com/en-us/library/windows/desktop/bb760441(v=vs.85).aspx
 // [ref] http://msdn.microsoft.com/en-us/library/windows/desktop/bb760540(v=vs.85).aspx
@@ -13,8 +8,11 @@
 // [ref] http://msdn.microsoft.com/en-us/library/vstudio/dd234915.aspx
 // [ref] http://www.win7dll.info/imageres_dll_icons.png (on win32, try icons in [-4..-1] and [1..255] range)
 
+#include <cassert>
+#include <cstdlib>
 #include <iostream>
 #include <map>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -23,11 +21,10 @@
 #ifdef _WIN32
 #   define UNICODE
 #   define _UNICODE
-#   include <windows.h>
+#   include <Windows.h>
+#   include <Shobjidl.h>
+#   include <Psapi.h>
 #   include <commctrl.h>
-#   pragma comment(lib, "comctl32.lib")
-#   pragma comment(lib, "user32.lib")
-#   pragma comment(lib, "shell32.lib")
 #   if defined(_M_IX86)
 #       pragma comment(linker, "/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='x86' publicKeyToken='6595b64144ccf1df' language='*'\"")
 #   elif defined(_M_IA64)
@@ -40,6 +37,14 @@
 #   ifndef TD_SHIELD_ICON
 #       define TD_SHIELD_ICON MAKEINTRESOURCEW(-4)
 #   endif
+#   if PSAPI_VERSION==1
+#      pragma comment(lib, "Psapi.lib")
+#   endif
+#   pragma comment(lib, "Shell32.lib")
+#   pragma comment(lib, "Ole32.lib")
+#   pragma comment(lib, "Kernel32.lib")
+#   pragma comment(lib, "User32.lib")
+#   pragma comment(lib, "ComCtl32.lib")
 #endif
 
 #ifdef _WIN32
@@ -65,7 +70,7 @@ namespace {
     struct extra {
         int dummy = 0;
         std::function<void(bubble::vars&)> cb;
-	std::vector<std::wstring> options;
+        std::vector<std::wstring> options;
         bubble::vars copy;
 
         $win32(
@@ -78,8 +83,6 @@ namespace {
         std::thread::id self = std::this_thread::get_id();
         return ( all[ self ] = all[ self ] );
     }
-}
-
 
 $win32(
     HRESULT CALLBACK TDCallback (
@@ -236,7 +239,132 @@ $win32(
 
         return !getDialog()["cancel_close"] ? S_OK : S_FALSE;
     }
+
+    // following code till end of namespace is actually used in notify(); functions
+
+    ULONG_PTR GetParentProcessId() { // By Napalm @ NetCore2K
+        ULONG ulSize = 0;
+        ULONG_PTR pbi[6];
+        LONG (WINAPI *NtQueryInformationProcess)(HANDLE ProcessHandle, ULONG ProcessInformationClass,
+        PVOID ProcessInformation, ULONG ProcessInformationLength, PULONG ReturnLength);
+        *(FARPROC *)&NtQueryInformationProcess =
+        GetProcAddress( LoadLibraryA("NTDLL.DLL"), "NtQueryInformationProcess" );
+        return NtQueryInformationProcess
+            && NtQueryInformationProcess( GetCurrentProcess(), 0, &pbi, sizeof(pbi), &ulSize ) >= 0
+            && ulSize == sizeof(pbi) ? pbi[5] : (ULONG_PTR)-1;
+    }
+
+    HICON GetParentProcessIcon() {
+        HICON icon = 0;
+        DWORD parentid = GetParentProcessId();
+        if( parentid != (DWORD)((ULONG_PTR)-1) ) {
+            HANDLE parent = OpenProcess( PROCESS_QUERY_INFORMATION|PROCESS_VM_READ, FALSE, parentid );
+            if( parent ) {
+                char parentname[ MAX_PATH ];
+                GetModuleFileNameExA( parent, 0, parentname, sizeof(parentname) );
+                ExtractIconExA( parentname, 0, 0, &icon, 1 );
+                CloseHandle( parent );
+            }
+        }
+        return icon;
+    }
+
+    class CQueryContinue : public IQueryContinue {
+        protected:
+        DWORD mDelay;
+        DWORD mStarted;
+
+        public:
+        CQueryContinue(DWORD d = 0) : mDelay(0) { SetTimeout(d); }
+
+        void SetTimeout(DWORD d) { mDelay = d; mStarted = GetTickCount(); }
+        bool TimeoutReached() const { return mDelay ? (GetTickCount()-mStarted) > mDelay : false; }
+
+        virtual ULONG STDMETHODCALLTYPE AddRef() { return 1; }
+        virtual ULONG STDMETHODCALLTYPE Release() { return 0; }
+
+        STDMETHODIMP QueryInterface(REFIID iid, void FAR* FAR* ppvObj) {
+            if( iid == IID_IUnknown || iid == IID_IQueryContinue ) {
+                *ppvObj = this;
+                AddRef();
+                return NOERROR;
+            }
+            return ResultFromScode( E_NOINTERFACE );
+        }
+
+        STDMETHODIMP QueryContinue(VOID) {
+            return TimeoutReached() ? S_FALSE : S_OK;
+        }
+    };
+
+    struct NOTIFU_PARAM {
+        bool mForceXP = false;
+        HICON mIcon = GetParentProcessIcon();
+        std::wstring mText = L"\n";
+        std::wstring mTitle = L""; // optional
+        DWORD mType = NIIF_USER | NIIF_LARGE_ICON;
+    };
+
+    bool notify(const NOTIFU_PARAM& params, IQueryContinue *querycontinue, IUserNotificationCallback *notifcallback)
+    {
+        // Replace \n with actual CRLF pair
+        const std::wstring crlf_text(L"\\n");
+        const std::wstring crlf(L"\n");
+        std::wstring text(params.mText);
+        size_t look = 0;
+        size_t found;
+        while( (found = text.find(crlf_text, look)) != std::wstring::npos ) {
+            text.replace(found, crlf_text.size(), crlf);
+            look = found+1;
+        }
+
+        // try the Vista/Windows 7 interface unless XP flag is specified
+        if( params.mForceXP ) {
+            // Fall back to Windows XP
+            // Using Windows XP interface IUserNotification
+            IUserNotification *un = 0;
+            HRESULT result = CoCreateInstance( CLSID_UserNotification, 0, CLSCTX_ALL, IID_IUserNotification, (void**)&un );
+            if( un && !FAILED(result) ) {
+                result = un->SetIconInfo( params.mIcon, params.mTitle.c_str() );
+                result = un->SetBalloonInfo( params.mTitle.c_str(), text.c_str(), params.mType );
+                result = un->SetBalloonRetry( 0, 250, 0 ); // controls what happens when the X button is clicked on
+                result = un->Show( querycontinue, 250 );
+                un->Release();
+                return true;
+            }
+        }
+
+        // Using Vista interface IUserNotification2
+        IUserNotification2 *un2 = 0;
+        HRESULT result = CoCreateInstance( CLSID_UserNotification, 0, CLSCTX_ALL, IID_IUserNotification2, (void**)&un2 );
+        if( un2 && !FAILED(result) ) {
+            result = un2->SetIconInfo( params.mIcon, params.mTitle.c_str() );
+            result = un2->SetBalloonInfo( params.mTitle.c_str(), text.c_str(), params.mType );
+            result = un2->SetBalloonRetry( 0, 250, 0 ); // controls what happens when the X button is clicked on
+            result = un2->Show( querycontinue, 250, notifcallback );
+            un2->Release();
+            return true;
+        }
+
+        return false;
+    }
+
+    void notify( const bubble::string &text, const bubble::string &title, HICON icon ) {
+        CoInitialize(0);
+        NOTIFU_PARAM params;
+
+        params.mTitle = title;
+        params.mText = text;
+        params.mIcon = icon;
+
+        IQueryContinue *c = new CQueryContinue();
+        notify( params, c, 0 );
+        delete c;
+    }
+
 )
+
+}
 
 int bubble::show( const bubble::vars &d_, const std::function<void(bubble::vars &)> &cb2 )
 {
@@ -356,9 +484,32 @@ int bubble::show( const bubble::string &input, const std::function<void(bubble::
     return show( v, cb2 );
 }
 
-// vars
-// progress (i), command_links (b)
-//
+void bubble::notify( const bubble::string &text, const bubble::string &title ) {
+    $win32(
+    ::notify( text, title, GetParentProcessIcon() );
+    )
+}
+void bubble::notify( const bubble::string &text, const bubble::string &title, int icon_no ) {
+    $win32(
+    static HINSTANCE hDll = LoadLibraryA( "imageres.dll" ); // also, "shell32.dll" or GetModuleHandle(NULL)
+    assert( hDll );
+    ::notify( text, title, LoadIcon( hDll, MAKEINTRESOURCE( icon_no ) ) );
+    )
+}
+void bubble::notify( const bubble::string &text, const bubble::string &title, const bubble::string &icon_file ) {
+    $win32(
+    ::notify( text, title, (HICON)LoadImageW( // returns a HANDLE so we have to cast to HICON
+      NULL,             // hInstance must be NULL when loading from a file
+      icon_file.c_str(),// the icon file name
+      IMAGE_ICON,       // specifies that the file is an icon
+      0,                // width of the image (we'll specify default later on)
+      0,                // height of the image
+      LR_LOADFROMFILE|  // we want to load a file (as opposed to a resource)
+      LR_DEFAULTSIZE|   // default metrics based on the type (IMAGE_ICON, 32x32)
+      LR_SHARED         // let the system release the handle when it's no longer used
+    ) );
+    )
+}
 
 #undef $yes
 #undef $no

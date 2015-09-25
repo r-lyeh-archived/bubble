@@ -2,6 +2,8 @@
 #include <iostream>
 
 int main() {
+    bubble::notify("notify dialog, using icon #19", "hello world", 19);
+
     bubble::show(
         "title.text=About;"
         "body.icon=14;"
@@ -65,4 +67,7 @@ int main() {
                 ui["exit"] = 0;
             }
     } );
+
+    // parent icon
+    bubble::notify("this is another notify dialog, using parent icon", "hello 2");
 }
